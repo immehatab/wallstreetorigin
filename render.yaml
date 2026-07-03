@@ -1,0 +1,16 @@
+# Free persistent-Node deploy (keeps all functionality, no code changes).
+# Render provides PORT automatically -> server.js reads it.
+services:
+  - type: web
+    name: wallstreetorigin
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start        # -> node server.js
+    envVars:
+      - key: NODE_VERSION
+        value: "20.11.1"           # stable Node for better-sqlite3 native build
+      - key: ANTHROPIC_BASE_URL
+        value: https://capi.aerolink.lat
+      - key: ANTHROPIC_API_KEY
+        sync: false                # set secret in Render dashboard, never committed
