@@ -46,17 +46,20 @@ export async function runOnchainJob(): Promise<number> {
   // core metrics (mark price, funding, open interest) so the engine still runs.
   if (markPrice == null || openInterest == null) {
     try {
-      const by = await get<{ result?: { list?: Array<{ lastPrice: string; markPrice: string; fundingRate: string; openInterest: string; openInterestValue: string }> } }>(
-        "https://api.bybit.com/v5/market/tickers?category=linear&symbol=BTCUSDT",
+      const dr = await get<{ result?: { mark_price?: number; funding_8h?: number; open_interest?: number } }>(
+        "https://www.deribit.com/api/v2/public/ticker?instrument_name=BTC-PERPETUAL",
       );
-      const t = by.result?.list?.[0];
-      if (t) {
-        if (markPrice == null) { markPrice = Number(t.markPrice); fundingRate = Number(t.fundingRate); }
-        if (openInterest == null) { openInterest = Number(t.openInterest); openInterestUsd = Number(t.openInterestValue); }
+      const t = dr.result;
+      if (t && typeof t.mark_price === "number") {
+        if (markPrice == null) { markPrice = t.mark_price; fundingRate = t.funding_8h ?? null; }
+        if (openInterest == null && typeof t.open_interest === "number") {
+          openInterestUsd = t.open_interest; // Deribit reports OI in USD
+          openInterest = t.mark_price > 0 ? t.open_interest / t.mark_price : null;
+        }
         missing = missing.filter((m) => m !== "funding/mark price" && m !== "open interest");
       }
     } catch {
-      /* Bybit also unavailable — leave as missing */
+      /* Deribit also unavailable — leave as missing */
     }
   }
   if (oiHist.status === "fulfilled" && oiHist.value.length > 1) {

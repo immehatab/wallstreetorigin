@@ -1,5 +1,5 @@
 import type { AssetId, Quote } from "@/core/types";
-import { type Adapter, curlJson, makeQuote } from "../adapter";
+import { type Adapter, curlJson, fetchJson, fetchText, makeQuote } from "../adapter";
 
 /**
  * Our asset -> Yahoo symbol. XAUUSD maps to gold FUTURES (GC=F) as a
@@ -60,6 +60,41 @@ function lastFinite(arr: (number | null)[]): { value: number; index: number } | 
   return null;
 }
 
+/**
+ * Keyless fallback for when Yahoo is datacenter-blocked (Render gets 429
+ * on both curl and native fetch). Recovers the two assets that DO have a
+ * keyless datacenter-friendly source: EURUSD (Frankfurter) and US10Y (FRED).
+ * The remaining index/commodity assets require a Twelve Data key in prod.
+ */
+async function fallbackQuotes(): Promise<Quote[]> {
+  const out: Quote[] = [];
+  const now = Date.now();
+  try {
+    const f = await fetchJson<{ rates?: { USD?: number } }>(
+      "https://api.frankfurter.dev/v1/latest?base=EUR&symbols=USD",
+      { timeoutMs: 8000 },
+    );
+    if (f.rates?.USD)
+      out.push(makeQuote({ asset: "EURUSD", price: f.rates.USD, currency: "USD", source: "frankfurter", sourceSymbol: "EUR/USD", ts: now }));
+  } catch {
+    /* skip */
+  }
+  try {
+    const csv = await fetchText("https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10", { timeoutMs: 15000 });
+    const lines = csv.trim().split("\n");
+    for (let i = lines.length - 1; i > 0; i--) {
+      const v = lines[i].split(",")[1];
+      if (v && v.trim() !== "." && Number.isFinite(Number(v))) {
+        out.push(makeQuote({ asset: "US10Y", price: Number(v), currency: "%", source: "fred", sourceSymbol: "DGS10", ts: now }));
+        break;
+      }
+    }
+  } catch {
+    /* skip */
+  }
+  return out;
+}
+
 export const yahooAdapter: Adapter = {
   id: "yahoo",
   async poll(): Promise<Quote[]> {
@@ -69,11 +104,15 @@ export const yahooAdapter: Adapter = {
 
     // Via curl, not fetch: Yahoo 429s undici's TLS fingerprint. See curlJson.
     // Yahoo also 429s intermittently even from curl, so retry with spacing.
-    const data = await withRetry(
-      () => curlJson<SparkResponse>(url, { timeoutMs: 9000 }),
-      2,
-      4000,
-    );
+    let data: SparkResponse;
+    try {
+      data = await withRetry(() => curlJson<SparkResponse>(url, { timeoutMs: 9000 }), 2, 4000);
+    } catch (e) {
+      // Yahoo fully blocked (e.g. Render datacenter IP) — keyless fallback.
+      const fb = await fallbackQuotes();
+      if (fb.length) return fb;
+      throw e;
+    }
 
     const quotes: Quote[] = [];
     for (const symbol of symbols) {

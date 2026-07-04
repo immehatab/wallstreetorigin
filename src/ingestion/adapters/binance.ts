@@ -16,35 +16,42 @@ interface BinanceTicker {
   closeTime: number;
 }
 
-interface CoinGeckoResp {
-  bitcoin?: { usd: number; usd_24h_change?: number };
-  ethereum?: { usd: number; usd_24h_change?: number };
+interface CbStats {
+  open: string;
+  last: string;
 }
 
-/** Fallback: CoinGecko is datacenter-friendly (Binance 451s cloud IPs). */
-async function coingeckoQuotes(): Promise<Quote[]> {
-  const url =
-    "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true";
-  const d = await fetchJson<CoinGeckoResp>(url, { timeoutMs: 8000 });
+/** Fallback: Coinbase is datacenter-friendly (Binance 451s cloud IPs;
+ *  CoinGecko 429s shared IPs). One /stats call per product = price + 24h. */
+async function coinbaseQuotes(): Promise<Quote[]> {
+  const products: Array<{ asset: AssetId; product: string }> = [
+    { asset: "BTCUSD", product: "BTC-USD" },
+    { asset: "ETHUSD", product: "ETH-USD" },
+  ];
   const now = Date.now();
-  const out: Quote[] = [];
-  const push = (asset: AssetId, o?: { usd: number; usd_24h_change?: number }, sym = "") => {
-    if (!o) return;
-    out.push(
-      makeQuote({
+  const settled = await Promise.allSettled(
+    products.map(async ({ asset, product }) => {
+      const s = await fetchJson<CbStats>(
+        `https://api.exchange.coinbase.com/products/${product}/stats`,
+        { timeoutMs: 8000 },
+      );
+      const price = Number(s.last);
+      const open = Number(s.open);
+      return makeQuote({
         asset,
-        price: o.usd,
-        changePct: o.usd_24h_change ?? null,
+        price,
+        changePct: open > 0 ? ((price - open) / open) * 100 : null,
         currency: "USD",
-        source: "coingecko",
-        sourceSymbol: sym,
+        source: "coinbase",
+        sourceSymbol: product,
         ts: now,
-      }),
-    );
-  };
-  push("BTCUSD", d.bitcoin, "bitcoin");
-  push("ETHUSD", d.ethereum, "ethereum");
-  if (out.length === 0) throw new Error("coingecko: no prices");
+      });
+    }),
+  );
+  const out = settled
+    .filter((r): r is PromiseFulfilledResult<Quote> => r.status === "fulfilled")
+    .map((r) => r.value);
+  if (out.length === 0) throw new Error("coinbase: no prices");
   return out;
 }
 
@@ -72,8 +79,8 @@ export const binanceAdapter: Adapter = {
           }),
         );
     } catch {
-      // Binance geo-blocks datacenter IPs (HTTP 451) — fall back to CoinGecko.
-      return coingeckoQuotes();
+      // Binance geo-blocks datacenter IPs (HTTP 451) — fall back to Coinbase.
+      return coinbaseQuotes();
     }
   },
 };
