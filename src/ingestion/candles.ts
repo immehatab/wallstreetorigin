@@ -12,10 +12,14 @@ import { writeCandles } from "@/store/candleRepo";
 
 const TIMEFRAMES: Timeframe[] = ["H1", "D1"];
 
-const BINANCE_ASSETS: Array<{ asset: AssetId; symbol: string }> = [
-  { asset: "BTCUSD", symbol: "BTCUSDT" },
-  { asset: "ETHUSD", symbol: "ETHUSDT" },
+const CRYPTO_ASSETS: Array<{ asset: AssetId; binance: string; coinbase: string }> = [
+  { asset: "BTCUSD", binance: "BTCUSDT", coinbase: "BTC-USD" },
+  { asset: "ETHUSD", binance: "ETHUSDT", coinbase: "ETH-USD" },
 ];
+
+// Coinbase granularity (seconds) per timeframe — datacenter-friendly fallback
+// when Binance geo-blocks (HTTP 451).
+const COINBASE_GRAN: Record<Timeframe, number> = { H1: 3600, H4: 14400, D1: 86400 };
 
 // XAUUSD FIRST — the primary asset gets first claim on Yahoo's throttled
 // quota. Others are best-effort behind it.
@@ -61,6 +65,34 @@ async function fetchBinance(symbol: string, tf: Timeframe): Promise<Candle[]> {
   }));
 }
 
+// Coinbase candles: [ time(s), low, high, open, close, volume ], newest first.
+type CbCandle = [number, number, number, number, number, number];
+
+async function fetchCoinbase(product: string, tf: Timeframe): Promise<Candle[]> {
+  const url = `https://api.exchange.coinbase.com/products/${product}/candles?granularity=${COINBASE_GRAN[tf]}`;
+  const data = await fetchJson<CbCandle[]>(url, { timeoutMs: 8000 });
+  return data.map((k) => ({
+    ts: k[0] * 1000,
+    open: k[3],
+    high: k[2],
+    low: k[1],
+    close: k[4],
+    volume: k[5],
+  }));
+}
+
+/** Crypto candles with failover: Binance klines -> Coinbase (451-safe). */
+async function fetchCryptoCandles(
+  a: { binance: string; coinbase: string },
+  tf: Timeframe,
+): Promise<{ candles: Candle[]; source: string }> {
+  try {
+    return { candles: await fetchBinance(a.binance, tf), source: "binance" };
+  } catch {
+    return { candles: await fetchCoinbase(a.coinbase, tf), source: "coinbase" };
+  }
+}
+
 // ---------------- Yahoo chart OHLC ----------------
 
 interface YahooChart {
@@ -85,7 +117,13 @@ async function fetchYahooOnce(symbol: string, tf: Timeframe): Promise<Candle[]> 
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
     symbol,
   )}?interval=${interval}&range=${range}`;
-  const data = await curlJson<YahooChart>(url, { timeoutMs: 9000 });
+  // curl first (undici is fingerprint-blocked); native fetch as datacenter fallback.
+  let data: YahooChart;
+  try {
+    data = await curlJson<YahooChart>(url, { timeoutMs: 9000 });
+  } catch {
+    data = await fetchJson<YahooChart>(url, { timeoutMs: 9000 });
+  }
   const r = data.chart.result?.[0];
   if (!r?.timestamp || !r.indicators?.quote?.[0]) return [];
   const q = r.indicators.quote[0];
@@ -125,19 +163,19 @@ async function fetchYahoo(symbol: string, tf: Timeframe): Promise<Candle[]> {
 
 // ---------------- jobs ----------------
 
-/** Crypto candles. Parallel is safe here — Binance is generous. */
+/** Crypto candles (Binance -> Coinbase failover). */
 export async function runBinanceCandlesJob(): Promise<number> {
   let total = 0;
-  const tasks = BINANCE_ASSETS.flatMap((a) =>
+  const tasks = CRYPTO_ASSETS.flatMap((a) =>
     TIMEFRAMES.map(async (tf) => {
-      const candles = await fetchBinance(a.symbol, tf);
-      if (candles.length) total += writeCandles(a.asset, tf, "binance", candles);
+      const { candles, source } = await fetchCryptoCandles(a, tf);
+      if (candles.length) total += writeCandles(a.asset, tf, source, candles);
     }),
   );
   const settled = await Promise.allSettled(tasks);
   if (total === 0) {
     const err = settled.find((s) => s.status === "rejected") as PromiseRejectedResult | undefined;
-    throw new Error(`binance klines: no candles (${err?.reason ?? "unknown"})`);
+    throw new Error(`crypto klines: no candles (${err?.reason ?? "unknown"})`);
   }
   return total;
 }

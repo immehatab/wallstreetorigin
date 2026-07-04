@@ -66,7 +66,7 @@ function isoDaysAgo(days: number): string {
 async function fetchSeries(def: MacroSeriesDef): Promise<MacroSeries | null> {
   const start = isoDaysAgo(430); // ~14 months: enough for YoY + monthly trend
   const url = `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${def.fredId}&cosd=${start}`;
-  const points = parseCsv(await fetchText(url, { timeoutMs: 9000 }));
+  const points = parseCsv(await fetchText(url, { timeoutMs: 20000 }));
   if (points.length === 0) return null;
 
   const latest = points[points.length - 1];

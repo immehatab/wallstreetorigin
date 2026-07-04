@@ -15,7 +15,7 @@ async function get<T>(url: string): Promise<T> {
 }
 
 export async function runOnchainJob(): Promise<number> {
-  const missing: string[] = [];
+  let missing: string[] = [];
   let markPrice: number | null = null;
   let fundingRate: number | null = null;
   let openInterest: number | null = null;
@@ -41,6 +41,24 @@ export async function runOnchainJob(): Promise<number> {
   } else missing.push("funding/mark price");
   if (oi.status === "fulfilled") openInterest = Number(oi.value.openInterest);
   else missing.push("open interest");
+
+  // Binance fapi geo-blocks datacenter IPs (451). Fall back to Bybit for the
+  // core metrics (mark price, funding, open interest) so the engine still runs.
+  if (markPrice == null || openInterest == null) {
+    try {
+      const by = await get<{ result?: { list?: Array<{ lastPrice: string; markPrice: string; fundingRate: string; openInterest: string; openInterestValue: string }> } }>(
+        "https://api.bybit.com/v5/market/tickers?category=linear&symbol=BTCUSDT",
+      );
+      const t = by.result?.list?.[0];
+      if (t) {
+        if (markPrice == null) { markPrice = Number(t.markPrice); fundingRate = Number(t.fundingRate); }
+        if (openInterest == null) { openInterest = Number(t.openInterest); openInterestUsd = Number(t.openInterestValue); }
+        missing = missing.filter((m) => m !== "funding/mark price" && m !== "open interest");
+      }
+    } catch {
+      /* Bybit also unavailable — leave as missing */
+    }
+  }
   if (oiHist.status === "fulfilled" && oiHist.value.length > 1) {
     const first = Number(oiHist.value[0].sumOpenInterest);
     const lastRow = oiHist.value[oiHist.value.length - 1];
