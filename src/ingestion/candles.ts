@@ -186,7 +186,7 @@ export async function runYahooCandlesJob(): Promise<number> {
   for (const a of YAHOO_ASSETS) {
     for (const tf of TIMEFRAMES) {
       try {
-        const candles = await fetchYahoo(a.symbol, tf);
+        const candles = await fetchYahooOnce(a.symbol, tf);
         if (candles.length) total += writeCandles(a.asset, tf, "yahoo", candles);
       } catch (e) {
         lastErr = e;
