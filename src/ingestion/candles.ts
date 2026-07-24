@@ -40,8 +40,8 @@ const BINANCE_INTERVAL: Record<Timeframe, { interval: string; limit: number }> =
 };
 
 const YAHOO_PARAMS: Record<Timeframe, { interval: string; range: string }> = {
-  H1: { interval: "60m", range: "1mo" },
-  H4: { interval: "60m", range: "3mo" }, // aggregated client-side if needed
+  H1: { interval: "60m", range: "5d" },
+  H4: { interval: "60m", range: "1mo" }, // aggregated client-side if needed
   D1: { interval: "1d", range: "1y" },
 };
 
