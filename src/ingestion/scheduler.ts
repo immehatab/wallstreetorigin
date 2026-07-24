@@ -146,6 +146,7 @@ const MAX_BACKOFF_MS = 300_000; // 5 min ceiling
 function scheduleSource(id: string, job: Job, pollMs: number) {
   // Self-scheduling, non-overlapping loop with exponential backoff on
   // failure so a throttled source recovers instead of being hammered.
+  log.info(`Scheduling source ${id}`);
   const loop = async () => {
     log.info(`Scheduler loop for ${id} started`);
     await runCycle(id, job);
