@@ -139,7 +139,7 @@ export default function Page() {
                   <b>{integrity.assetsWithData}</b>/{integrity.assetsTotal} assets fresh
                 </span>
                 <span>
-                  <b>{integrity.sourcesLive}</b> sources live
+                  <b>{integrity.sourcesLive}</b> sources fresh
                 </span>
               </div>
             </div>

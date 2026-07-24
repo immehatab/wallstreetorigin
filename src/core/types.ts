@@ -62,7 +62,7 @@ export interface Quote {
   ingestedAt: number;
 }
 
-export type SourceStatus = "live" | "degraded" | "down" | "unconfigured";
+export type SourceStatus = "unconfigured" | "fresh" | "delayed" | "stale" | "offline";
 
 export type SourceCategory =
   | "price"

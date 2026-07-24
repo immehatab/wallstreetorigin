@@ -1,5 +1,5 @@
 import type { Quote } from "@/core/types";
-import { type Adapter, fetchJson, makeQuote } from "../adapter";
+import { type Adapter, fetchJson, makeQuote, retryFn } from "../adapter";
 
 interface GoldApiResp {
   price: number;
@@ -17,9 +17,11 @@ interface GoldApiResp {
 export const goldApiAdapter: Adapter = {
   id: "goldapi",
   async poll(): Promise<Quote[]> {
-    const data = await fetchJson<GoldApiResp>("https://api.gold-api.com/price/XAU", {
-      timeoutMs: 6000,
-    });
+    const data = await retryFn(() =>
+      fetchJson<GoldApiResp>("https://api.gold-api.com/price/XAU", {
+        timeoutMs: 6000,
+      })
+    );
     const ts = Date.parse(data.updatedAt);
     return [
       makeQuote({

@@ -1,7 +1,8 @@
 import { SOURCES } from "@/core/registry";
-import type { SourceHealth } from "@/core/types";
+import type { SourceHealth, SourceStatus } from "@/core/types";
 import { upsertHealth, writeQuotes } from "@/store/repo";
 import type { Adapter } from "./adapter";
+import { log } from "@/lib/logger";
 import { binanceAdapter } from "./adapters/binance";
 import { goldApiAdapter } from "./adapters/goldapi";
 import { yahooAdapter } from "./adapters/yahoo";
@@ -56,12 +57,12 @@ function isConfigured(sourceId: string): boolean {
 
 function initHealth() {
   for (const s of SOURCES) {
-    const runnable = s.enabled && !!JOBS[s.id] && isConfigured(s.id);
+    const configured = isConfigured(s.id);
     setHealth({
       id: s.id,
-      status: runnable ? "degraded" : "unconfigured", // degraded until first success
+      status: configured ? "offline" : "unconfigured", // offline until first success
       lastSuccess: null,
-      lastError: runnable ? null : s.requiresKey ? `missing ${s.keyEnv}` : "no adapter",
+      lastError: configured ? null : s.requiresKey ? `missing ${s.keyEnv}` : "no adapter",
       lastErrorAt: null,
       lastLatencyMs: null,
       consecutiveFailures: 0,
@@ -75,25 +76,65 @@ async function runCycle(id: string, job: Job) {
   const t0 = Date.now();
   try {
     const count = await job();
+    const source = SOURCES.find(s => s.id === id);
+    const pollMs = source ? source.pollMs : 0;
+    const now = Date.now();
+    const age = now - (prev?.lastSuccess ?? 0);
+    let status: SourceStatus = "offline";
+    if (prev?.lastSuccess === null) {
+      // first success
+      status = "fresh";
+      log.info(`Source ${id} succeeded (first success)`);
+    } else {
+      if (age < pollMs * 1.5) status = "fresh";
+      else if (age < pollMs * 2) status = "delayed";
+      else if (age < pollMs * 4) status = "stale";
+      else status = "offline";
+      if (status === "fresh") {
+        log.info(`Source ${id} succeeded (fresh)`);
+      } else if (status === "delayed") {
+        log.warn(`Source ${id} succeeded but delayed (age: ${Math.round(age / 10)}ms)`);
+      } else if (status === "stale") {
+        log.warn(`Source ${id} succeeded but stale (age: ${Math.round(age)}ms)`);
+      }
+    }
     setHealth({
       id,
-      status: "live",
-      lastSuccess: Date.now(),
+      status,
+      lastSuccess: now,
       lastError: null,
       lastErrorAt: prev?.lastErrorAt ?? null,
-      lastLatencyMs: Date.now() - t0,
+      lastLatencyMs: now - t0,
       consecutiveFailures: 0,
       quotesLastCycle: count,
     });
   } catch (err) {
     const fails = (prev?.consecutiveFailures ?? 0) + 1;
+    const source = SOURCES.find(s => s.id === id);
+    const pollMs = source ? source.pollMs : 0;
+    const now = Date.now();
+    let status: SourceStatus = "offline";
+    if (fails >= 3) {
+      status = "offline";
+    } else if (prev?.lastSuccess === null) {
+      // still never succeeded
+      status = "offline";
+    } else {
+      const age = now - (prev?.lastSuccess ?? 0);
+      if (age < pollMs * 1.5) status = "fresh";
+      else if (age < pollMs * 2) status = "delayed";
+      else if (age < pollMs * 4) status = "stale";
+      else status = "offline";
+    }
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    log.error(`Source ${id} failed (attempt ${fails}): ${errorMsg}`);
     setHealth({
       id,
-      status: fails >= 3 ? "down" : "degraded",
+      status,
       lastSuccess: prev?.lastSuccess ?? null,
-      lastError: err instanceof Error ? err.message : String(err),
-      lastErrorAt: Date.now(),
-      lastLatencyMs: Date.now() - t0,
+      lastError: errorMsg,
+      lastErrorAt: now,
+      lastLatencyMs: now - t0,
       consecutiveFailures: fails,
       quotesLastCycle: 0,
     });

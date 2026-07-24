@@ -48,6 +48,33 @@ export async function fetchJson<T = unknown>(
 }
 
 /**
+ * Retry a function with exponential backoff.
+ * @param fn - Async function to retry
+ * @param retries - Number of retry attempts (default 3)
+ * @param delayMs - Base delay in milliseconds (default 1000)
+ * @returns The result of the function
+ * @throws The last error if all retries fail
+ */
+export async function retryFn<T>(
+  fn: () => Promise<T>,
+  retries = 3,
+  delayMs = 1000
+): Promise<T> {
+  let lastError: unknown;
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      if (i === retries) break;
+      // Wait before retrying (exponential backoff)
+      await new Promise(resolve => setTimeout(resolve, delayMs * 2 ** i));
+    }
+  }
+  throw lastError;
+}
+
+/**
  * curl-backed JSON fetch. Yahoo's Akamai bot manager blocks Node's
  * undici TLS fingerprint (429) while accepting curl's — verified
  * back-to-back on 2026-07-02. For those hosts we shell out to curl,

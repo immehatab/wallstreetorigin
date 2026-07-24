@@ -155,7 +155,7 @@ export function getSnapshot(now: number): TerminalSnapshot {
 
   const sources = getHealth();
   const assetsWithData = assets.filter((a) => a.quote && !a.stale).length;
-  const sourcesLive = sources.filter((s) => s.status === "live").length;
+  const sourcesLive = sources.filter((s) => s.status === "fresh" || s.status === "delayed" || s.status === "stale").length;
   // Only count sources that are actually meant to be running.
   const activeSourceCount = sources.length;
 

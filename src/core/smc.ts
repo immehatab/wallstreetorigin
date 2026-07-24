@@ -54,6 +54,38 @@ export interface OrderBlock {
   mitigated: boolean; // price has returned into it
 }
 
+export interface BreakerBlock {
+  kind: Direction; // opposite of original OB direction
+  top: number;
+  bottom: number;
+  ts: number; // when the OB was broken
+  mitigated: boolean; // price has returned into the breaker
+  origin: {
+    top: number;
+    bottom: number;
+    ts: number;
+  }; // original OB that was broken
+}
+
+export interface RejectionBlock {
+  kind: Direction; // same as original OB direction
+  top: number;
+  bottom: number;
+  ts: number; // when the rejection occurred
+  mitigated: boolean; // price has since mitigated the rejection level
+  origin: {
+    top: number;
+    bottom: number;
+    ts: number;
+  }; // original OB that was respected
+}
+
+export interface OtEdit {
+  low: number;
+  high: number;
+  range: number;
+}
+
 export interface LiquidityPool {
   kind: "buyside" | "sellside"; // resting liquidity above highs / below lows
   price: number;
@@ -100,9 +132,12 @@ export interface SmcAnalysis {
   swings: SwingPoint[];
   fvgs: FVG[]; // recent unfilled first
   orderBlocks: OrderBlock[];
+  breakerBlocks: BreakerBlock[]; // breaker blocks (mitigated OBs that have been broken)
+  rejectionBlocks: RejectionBlock[]; // rejection tests of order blocks that held
   liquidity: LiquidityPool[];
   range: DealingRange;
   session: SessionInfo;
+  ote?: OtEdit; // Optimal Trade Entry (62-79% Fibonacci retracement zone)
 
   /** Human-readable reasoning, built BEFORE the final bias line. */
   narrative: string[];

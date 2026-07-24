@@ -1,5 +1,5 @@
 import type { AssetId, Quote } from "@/core/types";
-import { type Adapter, fetchJson, makeQuote } from "../adapter";
+import { type Adapter, fetchJson, makeQuote, retryFn } from "../adapter";
 
 /** Binance symbol -> our asset id. */
 const MAP: Record<string, AssetId> = {
@@ -31,9 +31,11 @@ async function coinbaseQuotes(): Promise<Quote[]> {
   const now = Date.now();
   const settled = await Promise.allSettled(
     products.map(async ({ asset, product }) => {
-      const s = await fetchJson<CbStats>(
-        `https://api.exchange.coinbase.com/products/${product}/stats`,
-        { timeoutMs: 8000 },
+      const s = await retryFn(() =>
+        fetchJson<CbStats>(
+          `https://api.exchange.coinbase.com/products/${product}/stats`,
+          { timeoutMs: 8000 }
+        )
       );
       const price = Number(s.last);
       const open = Number(s.open);
@@ -62,7 +64,9 @@ export const binanceAdapter: Adapter = {
     const param = encodeURIComponent(JSON.stringify(symbols));
     const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=${param}`;
     try {
-      const data = await fetchJson<BinanceTicker[]>(url, { timeoutMs: 6000 });
+      const data = await retryFn(() =>
+        fetchJson<BinanceTicker[]>(url, { timeoutMs: 6000 })
+      );
       return data
         .filter((t) => MAP[t.symbol])
         .map((t) =>

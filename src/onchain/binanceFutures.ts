@@ -1,4 +1,4 @@
-import { fetchJson } from "@/ingestion/adapter";
+import { fetchJson, retryFn } from "@/ingestion/adapter";
 import type { BtcOnchain, DerivMetric, Lean } from "@/core/onchain";
 import { writeOnchain } from "@/store/onchainRepo";
 
@@ -11,7 +11,7 @@ import { writeOnchain } from "@/store/onchainRepo";
 const FAPI = "https://fapi.binance.com";
 
 async function get<T>(url: string): Promise<T> {
-  return fetchJson<T>(url, { timeoutMs: 8000 });
+  return retryFn(() => fetchJson<T>(url, { timeoutMs: 8000 }));
 }
 
 export async function runOnchainJob(): Promise<number> {

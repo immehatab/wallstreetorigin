@@ -1,4 +1,4 @@
-import { curlText } from "@/ingestion/adapter";
+import { curlText, retryFn } from "@/ingestion/adapter";
 import type { FeedDef, NewsItem } from "@/core/news";
 
 /**
@@ -13,13 +13,13 @@ function stripCdata(s: string): string {
 
 function decodeEntities(s: string): string {
   return s
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
+    .replace(/</g, "<")
+    .replace(/>/g, ">")
+    .replace(/"/g, '"')
+    .replace(/'/g, "'")
     .replace(/&apos;/g, "'")
     .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&");
+    .replace(/&/g, "&");
 }
 
 function stripHtml(s: string): string {
@@ -60,7 +60,9 @@ function hashId(s: string): string {
 }
 
 export async function fetchFeed(feed: FeedDef): Promise<NewsItem[]> {
-  const xml = await curlText(feed.url, { timeoutMs: 9000 });
+  const xml = await retryFn(() =>
+    curlText(feed.url, { timeoutMs: 9000 })
+  );
 
   const blocks =
     xml.match(/<item[\s\S]*?<\/item>/gi) ?? xml.match(/<entry[\s\S]*?<\/entry>/gi) ?? [];

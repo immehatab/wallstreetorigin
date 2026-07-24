@@ -4,9 +4,10 @@ import { formatAge } from "@/lib/format";
 
 function statusLabel(s: SourceHealth["status"]): string {
   switch (s) {
-    case "live": return "LIVE";
-    case "degraded": return "DEGRADED";
-    case "down": return "DOWN";
+    case "fresh": return "FRESH";
+    case "delayed": return "DELAYED";
+    case "stale": return "STALE";
+    case "offline": return "OFFLINE";
     case "unconfigured": return "NOT WIRED";
   }
 }
@@ -18,8 +19,8 @@ export function SourceHealthPanel({
   sources: SourceHealth[];
   now: number;
 }) {
-  // Live/degraded/down first, unconfigured last.
-  const rank: Record<string, number> = { live: 0, degraded: 1, down: 2, unconfigured: 3 };
+  // Fresh/delayed/stale/offline first, unconfigured last.
+  const rank: Record<string, number> = { fresh: 0, delayed: 1, stale: 2, offline: 3, unconfigured: 4 };
   const ordered = [...sources].sort((a, b) => rank[a.status] - rank[b.status]);
 
   return (

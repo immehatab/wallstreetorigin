@@ -1,10 +1,12 @@
 import type { AssetId } from "@/core/types";
-import type { Candle, SmcAnalysis, Timeframe, Trend } from "@/core/smc";
+import type { Candle, SmcAnalysis, SwingPoint, Timeframe, Trend, BreakerBlock, RejectionBlock } from "@/core/smc";
 import { getCandles, candleSource } from "@/store/candleRepo";
-import { detectSwings } from "./swings";
+import { detectSwings, lastSwings } from "./swings";
 import { analyzeStructure } from "./structure";
 import { detectFVGs } from "./fvg";
 import { detectOrderBlocks } from "./orderblocks";
+import { detectBreakerBlocks } from "./breaker";
+import { detectRejectionBlocks } from "./rejection";
 import { dealingRange } from "./range";
 import { detectLiquidity } from "./liquidity";
 import { sessionInfo } from "./sessions";
@@ -30,6 +32,8 @@ function emptyAnalysis(
     swings: [],
     fvgs: [],
     orderBlocks: [],
+    breakerBlocks: [],
+    rejectionBlocks: [],
     liquidity: [],
     range: { high: 0, low: 0, equilibrium: 0, positionPct: 0.5, zone: "equilibrium" },
     session: {
@@ -58,6 +62,8 @@ export function analyzeCandles(
   const structure = analyzeStructure(candles, swings, 2);
   const allFvgs = detectFVGs(candles);
   const orderBlocks = detectOrderBlocks(candles, structure.events, 10);
+  const breakerBlocks = detectBreakerBlocks(candles, orderBlocks);
+  const rejectionBlocks = detectRejectionBlocks(candles, orderBlocks);
   const range = dealingRange(candles, Math.min(60, candles.length));
   const liquidity = detectLiquidity(candles, swings);
   const session = sessionInfo(candles, tf, now);
@@ -71,6 +77,12 @@ export function analyzeCandles(
     .sort((a, b) => b.ts - a.ts)
     .slice(0, 8);
   const activeOBs = orderBlocks.filter((o) => !o.mitigated).slice(-6);
+  const activeBreakers = breakerBlocks.filter((b) => !b.mitigated).slice(-6);
+  const activeRejections = rejectionBlocks.filter((r) => !r.mitigated).slice(-6);
+
+  // Calculate Optimal Trade Entry (OTE) - ICT concept
+  const { high: recentHigh, low: recentLow } = lastSwings(swings);
+  const ote = calculateOTE(recentHigh, recentLow, structure.state);
 
   // ---- Trend ----
   const trend: Trend = structure.state === "neutral" ? "ranging" : structure.state;
@@ -99,10 +111,16 @@ export function analyzeCandles(
     );
   }
   narrative.push(
-    `${fvgs.length} unfilled FVG(s), ${activeOBs.length} unmitigated order block(s) in view.`,
+    `${fvgs.length} unfilled FVG(s), ${activeOBs.length} unmitigated order block(s), ${activeBreakers.length} untouched breaker block(s), ${activeRejections.length} active rejection block(s) in view.`,
   );
   if (session.current !== "closed") {
     narrative.push(`Active session: ${session.current.toUpperCase()}.`);
+  }
+  if (ote) {
+    const { low, high, range: oteRange } = ote;
+    narrative.push(
+      `OTE (Optimal Trade Entry): ${dp(low)}–${dp(high)} (${oteRange}% retracement zone).`,
+    );
   }
 
   // ---- Final bias with transparent confidence ----
@@ -147,6 +165,28 @@ export function analyzeCandles(
     confidence += 6;
   }
 
+  // Consider breaker blocks as confluence factors
+  if (activeBreakers.some((b) => b.kind === trend)) {
+    reasons.push(`Unmitigated ${trend} breaker block provides confluence.`);
+    confidence += 4;
+  }
+
+  // Consider rejection blocks as confirmation
+  if (activeRejections.some((r) => r.kind === trend)) {
+    reasons.push(`Recent ${trend} rejection shows strong institutional interest.`);
+    confidence += 5;
+  }
+
+  // OTE confluence bonus
+  if (
+    ote &&
+    ((trend === "bullish" && lastPrice >= ote.low && lastPrice <= ote.high) ||
+      (trend === "bearish" && lastPrice >= ote.low && lastPrice <= ote.high))
+  ) {
+    reasons.push("Price is within OTE zone — optimal entry area.");
+    confidence += 5;
+  }
+
   confidence = Math.max(35, Math.min(90, Math.round(confidence)));
 
   // ---- Missing / caveats ----
@@ -169,12 +209,57 @@ export function analyzeCandles(
     swings: swings.slice(-40),
     fvgs,
     orderBlocks: activeOBs,
+    breakerBlocks: activeBreakers,
+    rejectionBlocks: activeRejections,
     liquidity,
     range,
     session,
     narrative,
     bias: { direction: trend, confidence, reasons },
     missing,
+    ...(ote && { ote }),
+  };
+}
+
+/**
+ * Calculate Optimal Trade Entry (OTE) zone - ICT concept
+ * Returns the 62% to 79% Fibonacci retracement zone of the last swing
+ */
+function calculateOTE(
+  high: SwingPoint | null,
+  low: SwingPoint | null,
+  structureState: "bullish" | "bearish" | "neutral"
+): { low: number; high: number; range: number } | null {
+  if (!high || !low) return null;
+
+  const range = Math.abs(high.price - low.price);
+  if (range === 0) return null;
+
+  let fib62: number, fib79: number;
+
+  if (structureState === "bullish") {
+    // For bullish structure, OTE is retracement from low to high
+    fib62 = low.price + range * 0.62;
+    fib79 = low.price + range * 0.79;
+  } else if (structureState === "bearish") {
+    // For bearish structure, OTE is retracement from high to low
+    fib62 = high.price - range * 0.62;
+    fib79 = high.price - range * 0.79;
+  } else {
+    // Ranging - use last swing
+    fib62 = low.price + range * 0.62;
+    fib79 = low.price + range * 0.79;
+  }
+
+  // Ensure low < high
+  const oteLow = Math.min(fib62, fib79);
+  const oteHigh = Math.max(fib62, fib79);
+  const oteRange = Math.abs(fib79 - fib62);
+
+  return {
+    low: oteLow,
+    high: oteHigh,
+    range: ((oteHigh - oteLow) / range) * 100,
   };
 }
 

@@ -1,6 +1,6 @@
 import type { AssetId } from "@/core/types";
 import type { Candle, Timeframe } from "@/core/smc";
-import { curlJson, fetchJson } from "./adapter";
+import { curlJson, fetchJson, retryFn } from "./adapter";
 import { writeCandles } from "@/store/candleRepo";
 
 // ============================================================
@@ -54,7 +54,9 @@ type Kline = [number, string, string, string, string, string, ...unknown[]];
 async function fetchBinance(symbol: string, tf: Timeframe): Promise<Candle[]> {
   const { interval, limit } = BINANCE_INTERVAL[tf];
   const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
-  const data = await fetchJson<Kline[]>(url, { timeoutMs: 8000 });
+  const data = await retryFn(() =>
+    fetchJson<Kline[]>(url, { timeoutMs: 8000 })
+  );
   return data.map((k) => ({
     ts: k[0],
     open: Number(k[1]),
@@ -70,7 +72,9 @@ type CbCandle = [number, number, number, number, number, number];
 
 async function fetchCoinbase(product: string, tf: Timeframe): Promise<Candle[]> {
   const url = `https://api.exchange.coinbase.com/products/${product}/candles?granularity=${COINBASE_GRAN[tf]}`;
-  const data = await fetchJson<CbCandle[]>(url, { timeoutMs: 8000 });
+  const data = await retryFn(() =>
+    fetchJson<CbCandle[]>(url, { timeoutMs: 8000 })
+  );
   return data.map((k) => ({
     ts: k[0] * 1000,
     open: k[3],
