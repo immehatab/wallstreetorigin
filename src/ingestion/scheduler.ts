@@ -147,9 +147,11 @@ function scheduleSource(id: string, job: Job, pollMs: number) {
   // Self-scheduling, non-overlapping loop with exponential backoff on
   // failure so a throttled source recovers instead of being hammered.
   const loop = async () => {
+    log.info(`Scheduler loop for ${id} started`);
     await runCycle(id, job);
     const fails = health.get(id)?.consecutiveFailures ?? 0;
     const delay = fails > 0 ? Math.min(pollMs * 2 ** fails, MAX_BACKOFF_MS) : pollMs;
+    log.info(`Scheduler loop for ${id} finished, next in ${delay}ms`);
     setTimeout(loop, delay);
   };
   setTimeout(loop, Math.floor(Math.random() * 1000));
