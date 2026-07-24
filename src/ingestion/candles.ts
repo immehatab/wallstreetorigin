@@ -42,7 +42,7 @@ const BINANCE_INTERVAL: Record<Timeframe, { interval: string; limit: number }> =
 const YAHOO_PARAMS: Record<Timeframe, { interval: string; range: string }> = {
   H1: { interval: "60m", range: "5d" },
   H4: { interval: "60m", range: "1mo" }, // aggregated client-side if needed
-  D1: { interval: "1d", range: "6mo" },
+  D1: { interval: "1d", range: "3mo" },
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
