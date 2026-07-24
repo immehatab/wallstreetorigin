@@ -121,42 +121,37 @@ async function fetchYahooOnce(symbol: string, tf: Timeframe): Promise<Candle[]> 
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
     symbol,
   )}?interval=${interval}&range=${range}`;
-  // curl first (undici is fingerprint-blocked); native fetch as datacenter fallback.
-  let data: YahooChart;
-  try {
-    data = await curlJson<YahooChart>(url, { timeoutMs: 9000 });
-  } catch {
-    data = await fetchJson<YahooChart>(url, { timeoutMs: 9000 });
-  }
-  const r = data.chart.result?.[0];
-  if (!r?.timestamp || !r.indicators?.quote?.[0]) return [];
-  const q = r.indicators.quote[0];
-  const out: Candle[] = [];
-  for (let i = 0; i < r.timestamp.length; i++) {
-    const o = q.open?.[i];
-    const h = q.high?.[i];
-    const l = q.low?.[i];
-    const c = q.close?.[i];
-    if (o == null || h == null || l == null || c == null) continue; // skip gaps
-    out.push({
-      ts: r.timestamp[i] * 1000,
-      open: o,
-      high: h,
-      low: l,
-      close: c,
-      volume: q.volume?.[i] ?? 0,
-    });
-  }
-  return out;
-}
-
-/** Retry Yahoo chart on transient 429s (spaced, to let the throttle ease). */
-async function fetchYahoo(symbol: string, tf: Timeframe): Promise<Candle[]> {
   const gaps = [2500, 5000];
   let err: unknown;
   for (let i = 0; i <= gaps.length; i++) {
     try {
-      return await fetchYahooOnce(symbol, tf);
+      // curl first (undici is fingerprint-blocked); native fetch as datacenter fallback.
+      let data: YahooChart;
+      try {
+        data = await curlJson<YahooChart>(url, { timeoutMs: 9000 });
+      } catch {
+        data = await fetchJson<YahooChart>(url, { timeoutMs: 9000 });
+      }
+      const r = data.chart.result?.[0];
+      if (!r?.timestamp || !r.indicators?.quote?.[0]) return [];
+      const q = r.indicators.quote[0];
+      const out: Candle[] = [];
+      for (let i = 0; i < r.timestamp.length; i++) {
+        const o = q.open?.[i];
+        const h = q.high?.[i];
+        const l = q.low?.[i];
+        const c = q.close?.[i];
+        if (o == null || h == null || l == null || c == null) continue; // skip gaps
+        out.push({
+          ts: r.timestamp[i] * 1000,
+          open: o,
+          high: h,
+          low: l,
+          close: c,
+          volume: q.volume?.[i] ?? 0,
+        });
+      }
+      return out;
     } catch (e) {
       err = e;
       if (i < gaps.length) await sleep(gaps[i]);
