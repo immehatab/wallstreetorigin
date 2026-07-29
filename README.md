@@ -62,3 +62,4 @@ instrumentation.ts ── boots ── scheduler ── adapters (binance/goldap
 Everything flows from `src/core/registry.ts`. Keyed sources (Finnhub, FRED, Twelve Data,
 Coinglass…) are already declared there and appear greyed in the health panel until you add
 the matching key to `.env` — then they activate. See `.env.example`.
+# Last updated: Wed Jul 29 19:31:32 UTC 2026
