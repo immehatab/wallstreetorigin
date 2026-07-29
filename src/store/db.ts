@@ -117,13 +117,6 @@ function open(): Database.Database {
       PRIMARY KEY (asset, timeframe, ts)
     );
     CREATE INDEX IF NOT EXISTS idx_candles_lookup ON candles (asset, timeframe, ts DESC);
-
-    -- BTC ENGINE: latest derivatives snapshot (single row).
-    CREATE TABLE IF NOT EXISTS btc_onchain (
-      id         INTEGER PRIMARY KEY,
-      json       TEXT NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
   `);
 
   return db;

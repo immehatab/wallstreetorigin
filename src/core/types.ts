@@ -70,8 +70,7 @@ export type SourceCategory =
   | "fx"
   | "rates"
   | "macro"
-  | "news"
-  | "onchain";
+  | "news";
 
 /** Static description of a data provider — the registry entry. */
 export interface SourceDef {

@@ -9,7 +9,6 @@ import { yahooAdapter } from "./adapters/yahoo";
 import { runFredJob } from "@/macro/fred";
 import { runNewsJob } from "@/news/engine";
 import { runBinanceCandlesJob, runYahooCandlesJob } from "./candles";
-import { runOnchainJob } from "@/onchain/binanceFutures";
 
 /**
  * A Job fetches from one source, persists its own data, and returns how
@@ -34,7 +33,6 @@ const JOBS: Record<string, Job> = {
   rss: runNewsJob,
   candles_binance: runBinanceCandlesJob,
   candles_yahoo: runYahooCandlesJob,
-  binance_futures: runOnchainJob,
 };
 
 declare global {

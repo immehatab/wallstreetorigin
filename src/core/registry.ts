@@ -96,18 +96,6 @@ export const SOURCES: SourceDef[] = [
     enabled: true,
   },
 
-  {
-    id: "binance_futures",
-    name: "Binance Futures (derivatives)",
-    category: "onchain",
-    assets: ["BTCUSD"],
-    url: "https://binance-docs.github.io/apidocs/futures/en/",
-    requiresKey: false,
-    note: "Keyless: funding, open interest, long/short & taker ratios — BTC engine.",
-    pollMs: 60_000,
-    enabled: true,
-  },
-
   // ---- Declared but not yet wired (light up when keyed) ----
   {
     id: "twelvedata",
@@ -131,18 +119,6 @@ export const SOURCES: SourceDef[] = [
     keyEnv: "FINNHUB_API_KEY",
     note: "Free tier: market news + economic calendar. Powers Module 2 (News Engine).",
     pollMs: 60_000,
-    enabled: false,
-  },
-  {
-    id: "coinglass",
-    name: "Coinglass",
-    category: "onchain",
-    assets: ["BTCUSD", "ETHUSD"],
-    url: "https://coinglass.com",
-    requiresKey: true,
-    keyEnv: "COINGLASS_API_KEY",
-    note: "Funding, open interest, liquidation maps. Powers Module 5 (BTC engine).",
-    pollMs: 30_000,
     enabled: false,
   },
 ];
