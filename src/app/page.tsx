@@ -178,7 +178,7 @@ export default function Page() {
 
       <main className="wrap">
         {!snap ? (
-          <div className="loading mono">initializing data foundation…</div>
+          <div className="loading mono">initializing data framework…</div>
         ) : (
           <>
             <div className="section-title">Live Market Grid</div>
