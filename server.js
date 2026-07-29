@@ -1,3 +1,6 @@
+// Load environment variables from .env file
+require('dotenv').config();
+
 // Production entry for Hostinger Node.js (Passenger).
 // Passenger loads this file and provides the port via process.env.PORT.
 // next({dev:false}).prepare() boots the Next server AND runs

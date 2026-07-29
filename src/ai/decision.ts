@@ -206,10 +206,52 @@ export async function generateDecision(asset: AssetId, now: number): Promise<Tra
       system: SYSTEM,
       user: buildUserPrompt(inputs, smcFull, missing),
       model: AGENT_MODEL,
-      maxTokens: 1500,
+      maxTokens: 3000,
       temperature: 0.3,
     });
-    const p = extractJson<Record<string, unknown>>(text);
+
+    // Try to parse JSON, with fallback for common LLM output issues
+    let p: Record<string, unknown>;
+    try {
+      p = extractJson<Record<string, unknown>>(text);
+    } catch (jsonError) {
+      // If standard extraction fails, try to fix common issues
+      try {
+        // Extract content between first { and last }
+        const start = text.indexOf("{");
+        const end = text.lastIndexOf("}");
+        if (start !== -1 && end !== -1 && start < end) {
+          let jsonText = text.substring(start, end + 1);
+
+          // Try to fix missing closing brackets/braces
+          let openBraces = (jsonText.match(/[{]/g) || []).length;
+          let closeBraces = (jsonText.match(/[}]/g) || []).length;
+          let openBrackets = (jsonText.match(/[[]/g) || []).length;
+          let closeBrackets = (jsonText.match(/[\]]/g) || []).length;
+
+          // Add missing closing brackets/braces
+          while (openBrackets > closeBrackets) {
+            jsonText += ']';
+            closeBrackets++;
+          }
+          while (openBraces > closeBraces) {
+            jsonText += '}';
+            closeBraces++;
+          }
+
+          p = JSON.parse(jsonText);
+        } else {
+          throw jsonError;
+        }
+      } catch (fixError) {
+        // If we can't fix it, fall back to heuristic
+        return heuristicDecision(
+          asset, inputs, smcFull,
+          [...missing, `LLM JSON parse error: ${jsonError instanceof Error ? jsonError.message : String(jsonError)}`],
+          now,
+        );
+      }
+    }
 
     const bias: FinalBias =
       p.bias === "Buy" || p.bias === "Sell" ? (p.bias as FinalBias) : "Neutral";

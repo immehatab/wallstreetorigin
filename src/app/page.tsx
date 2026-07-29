@@ -222,7 +222,7 @@ export default function Page() {
               for its transmission mechanism.{" "}
               <b>News (RSS, keyless):</b> scored by a transparent heuristic engine (matched
               rules shown); it is keyword-based and negation-blind — add{" "}
-              <b>ANTHROPIC_API_KEY</b> to upgrade to LLM scoring. Refresh {POLL_MS / 1000}s.
+              NVIDIA NIM LLM configured for enhanced scoring. Refresh {POLL_MS / 1000}s.
             </div>
           </>
         )}

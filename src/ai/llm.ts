@@ -1,16 +1,22 @@
 // ============================================================
-//  LLM client — Aerolink (Anthropic-compatible /v1/messages).
-//  Reads ANTHROPIC_BASE_URL + ANTHROPIC_API_KEY from env.
-//  Sends BOTH x-api-key and Bearer so it works regardless of which
-//  scheme the router expects (verified: auth passes, models are
-//  claude-opus-4-7 / haiku-4-5 / sonnet-4-6 / sonnet-5).
+//  LLM client — NVIDIA NIM using OpenAI SDK
+//  Uses NVIDIA NIM endpoint with nemotron-3-super-120b model
 // ============================================================
 
-export const AGENT_MODEL = process.env.LLM_AGENT_MODEL ?? "claude-haiku-4-5-20251001";
-export const CHAIR_MODEL = process.env.LLM_CHAIR_MODEL ?? "claude-sonnet-5";
+import OpenAI from "openai";
 
+// NVIDIA NIM configuration
+const client = new OpenAI({
+  baseURL: "https://integrate.api.nvidia.com/v1",
+  apiKey: "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"
+});
+
+// Model configuration - export as AGENT_MODEL for compatibility with decision.ts
+export const AGENT_MODEL = "nvidia/nemotron-3-super-120b-a12b";
+
+/** Check if LLM is configured (always true for NVIDIA NIM) */
 export function llmAvailable(): boolean {
-  return !!(process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_BASE_URL);
+  return true; // NVIDIA NIM is always configured with hardcoded credentials
 }
 
 interface LlmOpts {
@@ -19,51 +25,55 @@ interface LlmOpts {
   model?: string;
   maxTokens?: number;
   temperature?: number;
+  topP?: number;
   timeoutMs?: number;
+  stream?: boolean;
 }
 
 /** One completion. Returns the assistant text. Throws on transport/API error. */
 export async function llmComplete(opts: LlmOpts): Promise<string> {
-  const key = process.env.ANTHROPIC_API_KEY;
-  const base = (process.env.ANTHROPIC_BASE_URL ?? "").replace(/\/+$/, "");
-  if (!key || !base) throw new Error("LLM not configured (ANTHROPIC_API_KEY/BASE_URL)");
-
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 45_000);
   try {
-    const res = await fetch(`${base}/v1/messages`, {
-      method: "POST",
-      signal: ctrl.signal,
-      headers: {
-        "x-api-key": key,
-        Authorization: `Bearer ${key}`,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: opts.model ?? AGENT_MODEL,
-        max_tokens: opts.maxTokens ?? 1024,
-        temperature: opts.temperature ?? 0.4,
-        system: opts.system,
-        messages: [{ role: "user", content: opts.user }],
-      }),
+    const completion = await client.chat.completions.create({
+      model: opts.model ?? AGENT_MODEL,
+      messages: [
+        { role: "system", content: opts.system },
+        { role: "user", content: opts.user }
+      ],
+      max_completion_tokens: opts.maxTokens ?? 16384,
+      temperature: opts.temperature ?? 1,
+      top_p: opts.topP ?? 0.95,
+      stream: false // Non-streaming for simpler handling
     });
 
-    const raw = await res.text();
-    if (!res.ok) throw new Error(`LLM HTTP ${res.status}: ${raw.slice(0, 200)}`);
+    return completion.choices[0]?.message?.content ?? "";
+  } catch (err) {
+    throw new Error(`LLM error: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
 
-    const json = JSON.parse(raw) as {
-      content?: Array<{ type: string; text?: string }>;
-    };
-    const text = (json.content ?? [])
-      .filter((b) => b.type === "text" && b.text)
-      .map((b) => b.text)
-      .join("")
-      .trim();
-    if (!text) throw new Error("LLM returned empty content");
-    return text;
-  } finally {
-    clearTimeout(timer);
+/** Streaming completion. Returns a stream of text chunks. */
+export async function* llmStream(opts: LlmOpts): AsyncGenerator<string, void, unknown> {
+  try {
+    const stream = await client.chat.completions.create({
+      model: opts.model ?? AGENT_MODEL,
+      messages: [
+        { role: "system", content: opts.system },
+        { role: "user", content: opts.user }
+      ],
+      max_completion_tokens: opts.maxTokens ?? 16384,
+      temperature: opts.temperature ?? 1,
+      top_p: opts.topP ?? 0.95,
+      stream: true // Enable streaming
+    });
+
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content;
+      if (content) {
+        yield content;
+      }
+    }
+  } catch (err) {
+    throw new Error(`LLM streaming error: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 

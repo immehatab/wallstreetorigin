@@ -5,7 +5,7 @@ import type { AssetId } from "./types";
 //  Items come from real, keyless RSS feeds. Scores are produced
 //  by a TRANSPARENT rule engine (see src/news/scoring.ts) — every
 //  score traces to explicit keyword/source rules, not a black box.
-//  When ANTHROPIC_API_KEY is present, an LLM scorer can augment it.
+//  When NVIDIA NIM is configured, an LLM scorer can augment it.
 // ============================================================
 
 export type NewsFeedCategory =

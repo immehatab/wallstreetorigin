@@ -5,7 +5,7 @@ import type { AssetId } from "@/core/types";
 //  TRANSPARENT heuristic scorer.
 //  Every number below traces to an explicit rule that "fired" on the
 //  headline text — surfaced in score.matched for full auditability.
-//  This is deliberately NOT a black box. When ANTHROPIC_API_KEY is
+//  This is deliberately NOT a black box. When NVIDIA NIM is configured,
 //  present, scoreWithLLM (future) can override, but the rules remain
 //  the honest, offline default.
 // ============================================================
