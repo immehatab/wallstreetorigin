@@ -39,7 +39,9 @@ class TTLCache<K, V> {
   }
 }
 
-// Cache FRED series for 2 hours (data updates daily)
+/**
+ * Cache FRED series for 2 hours (data updates daily).
+ */
 const fredSeriesCache = new TTLCache<string, MacroSeries | null>(2 * 60 * 60 * 1000);
 
 /**
@@ -76,7 +78,7 @@ interface Point {
 }
 
 function parseCsv(csv: string): Point[] {
-  const lines = csv.trim().split("\n");
+  const lines = csv.trim().split(/\r?\n/);
   const out: Point[] = [];
   // First line is the header: "observation_date,SERIES" (or "DATE,SERIES").
   for (let i = 1; i < lines.length; i++) {
@@ -89,7 +91,9 @@ function parseCsv(csv: string): Point[] {
   return out; // ascending by date (FRED default)
 }
 
-/** Nearest observation at or before (latestDate - days). */
+/**
+ * Nearest observation at or before (latestDate - days).
+ */
 function pointDaysBefore(points: Point[], days: number): Point | null {
   if (points.length === 0) return null;
   const latestMs = Date.parse(points[points.length - 1].date);
@@ -169,7 +173,7 @@ async function fetchSeries(def: MacroSeriesDef): Promise<MacroSeries | null> {
     date: latest.date,
     change,
     changeLabel,
-    goldBias: classifyGoldBias(change, value, def.unit, def.goldOnRise),
+    goldBias: classifyGoldBias(change, value, def.unit, goldOnRise),
     why: def.why,
     updatedAt: Date.now(),
   };
